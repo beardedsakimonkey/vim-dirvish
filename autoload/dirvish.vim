@@ -18,6 +18,10 @@ function! s:sl(path) abort
   return has('win32') ? tr(a:path, '\', '/') : a:path
 endfunction
 
+function! s:trim_indent(path) abort
+  return substitute(a:path, '^\t\+', '', '')
+endfunction
+
 function! s:normalize_dir(dir, silent) abort
   let dir = s:sl(a:dir)
   if !isdirectory(dir)
@@ -149,8 +153,14 @@ function! s:buf_init() abort
     autocmd! * <buffer>
     autocmd BufEnter,WinEnter <buffer> call <SID>on_bufenter()
     if exists('##TextChanged')
-      autocmd TextChanged,TextChangedI <buffer> if <SID>buf_modified()
-            \&& has('conceal')|exe 'setlocal conceallevel=0'|endif
+      autocmd TextChanged,TextChangedI <buffer> |
+            \if <SID>buf_modified() && has('conceal') |
+            \  if get(b:, 'dirvish_ignore_text_changed', 0) |
+            \    unlet b:dirvish_ignore_text_changed |
+            \  else |
+            \    exe 'setlocal conceallevel=0' |
+            \  endif |
+            \endif
     endif
 
     " BufUnload is fired for :bwipeout/:bdelete/:bunload, _even_ if
@@ -246,6 +256,7 @@ function! s:open_selected(splitcmd, bg, line1, line2) abort
   let paths = getline(a:line1, a:line2)
   for path in paths
     let path = s:sl(path)
+    let path = s:trim_indent(path)
     if !isdirectory(path) && !filereadable(path)
       call s:msg_error("invalid (access denied?): ".path)
       continue
@@ -526,6 +537,53 @@ function! dirvish#remove_icon_fn(fn_id) abort
     return 1
   endif
   return 0
+endfunction
+
+function! s:get_depth(path) abort
+  return matchend(a:path, '\t*')
+endfunction
+
+function! s:try_find_and_delete()
+  let found = 0
+  let [_, cur_lnum, _, _] = getpos('.')
+  let [_, last_lnum, _, _] = getpos('$')
+  let depth = s:get_depth(getline('.'))
+
+  for _ in range(cur_lnum, last_lnum)
+    if s:get_depth(getline(cur_lnum + 1)) <= depth
+      break
+    endif
+    let found = 1
+    let b:dirvish_ignore_text_changed = 1
+    execute cur_lnum + 1 . 'delete _'
+  endfor
+  return found
+endfunction
+
+function! dirvish#toggle_tree() range abort
+  setlocal listchars=tab:\|\ 
+  set list
+  let v = winsaveview()
+
+  for i in reverse(range(a:firstline, a:lastline))
+    let path = getline(i)
+    let isdir = (path[-1:] == s:sep)
+    if !isdir | continue | endif
+
+    let files = s:list_dir(s:trim_indent(path))
+    if empty(files) | continue | endif
+
+    let depth = s:get_depth(path) + 1
+    let indent = repeat("\t", depth)
+    let files_indented = map(files, {-> indent . v:val})
+
+    if !s:try_find_and_delete()
+      let b:dirvish_ignore_text_changed = 1
+      execute 'silent! ' . i . 'put =files_indented'
+    endif
+  endfor
+
+  call winrestview(v)
 endfunction
 
 nnoremap <silent> <Plug>(dirvish_quit) :<C-U>call <SID>buf_close()<CR>
