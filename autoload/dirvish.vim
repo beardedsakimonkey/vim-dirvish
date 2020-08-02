@@ -153,7 +153,7 @@ function! s:buf_init() abort
     autocmd! * <buffer>
     autocmd BufEnter,WinEnter <buffer> call <SID>on_bufenter()
     if exists('##TextChanged')
-      autocmd TextChanged,TextChangedI <buffer> |
+      autocmd TextChanged,TextChangedI <buffer>
             \if <SID>buf_modified() && has('conceal') |
             \  if get(b:, 'dirvish_ignore_text_changed', 0) |
             \    unlet b:dirvish_ignore_text_changed |
@@ -390,10 +390,10 @@ function! s:buf_render(dir, lastpath) abort
   if !empty(a:lastpath)
     let pat = get(g:, 'dirvish_relative_paths', 0) ? fnamemodify(a:lastpath, ':p:.') : a:lastpath
     let pat = empty(pat) ? a:lastpath : pat  " no longer in CWD
-    call search('\V\^'.escape(pat, '\').'\$', 'cw')
+    keepj call search('\V\^'.escape(pat, '\').'\$', 'cw')
   endif
   " Place cursor on the tail (last path segment).
-  call search('\'.s:sep.'\zs[^\'.s:sep.']\+\'.s:sep.'\?$', 'c', line('.'))
+  keepj call search('\'.s:sep.'\zs[^\'.s:sep.']\+\'.s:sep.'\?$', 'c', line('.'))
 endfunction
 
 function! s:apply_icons() abort
@@ -437,9 +437,9 @@ function! s:open_dir(d, reload) abort
   endfor
 
   if -1 == bnr
-    execute 'silent' s:noswapfile 'edit' fnameescape(d._dir)
+    execute 'silent' s:noau s:noswapfile 'edit' fnameescape(d._dir)
   else
-    execute 'silent' s:noswapfile 'buffer' bnr
+    execute 'silent' s:noau s:noswapfile 'buffer' bnr
   endif
 
   " Use :file to force a normalized path.
